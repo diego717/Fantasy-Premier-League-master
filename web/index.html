@@ -21,7 +21,7 @@
       </a>
       <div class="mode-switch" id="mode-switch" role="group" aria-label="Cambiar fuente estadística">
         <button class="mode-button active" data-mode="fpl" type="button" aria-pressed="true">FPL <small>FANTASY</small></button>
-        <button class="mode-button" data-mode="pl" type="button" aria-pressed="false">PL <small>LIGA</small></button>
+        <button class="mode-button" data-mode="pl" type="button" aria-pressed="false">LIGAS <small>REALES</small></button>
       </div>
       <div class="header-meta">
         <span class="live-dot"></span>
@@ -57,6 +57,12 @@
           <div class="hero-tag tag-bottom">SEÑAL<br /><strong>ACTIVA</strong></div>
           <div class="hero-stat"><strong id="hero-season-count">11</strong><span>temporadas<br />en foco</span></div>
         </div>
+      </section>
+
+      <section class="season-strip league-strip shell" id="league-strip" aria-label="Elegir liga" hidden>
+        <div class="strip-label"><span class="section-index">00</span><span>LIGA<br /><strong>EN FOCO</strong></span></div>
+        <div class="season-tabs" id="league-tabs"></div>
+        <div class="strip-caption" id="league-caption">—</div>
       </section>
 
       <section class="season-strip shell reveal" style="--delay: 240ms" aria-label="Cambiar temporada">

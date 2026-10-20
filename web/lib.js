@@ -5,7 +5,8 @@
   const RATE_SORTS = new Set(["pointsPer90", "pointsPerMillion", "goalsPer90", "contributionsPer90"]);
   const SEASON_PATTERN = /^\d{4}-\d{2}$/;
   const ID_PATTERN = /^\d{1,9}$/;
-  const HASH_KEYS ={ mode: "mode", season: "season", search: "q", club: "club", position: "pos", sort: "sort", player: "player", compare: "cmp" };
+  const LEAGUE_PATTERN = /^[a-z0-9]{2,12}$/;
+  const HASH_KEYS = { mode: "mode", league: "liga", season: "season", search: "q", club: "club", position: "pos", sort: "sort", player: "player", compare: "cmp" };
   // Letters NFD does not decompose into base + accent.
   const SPECIAL_LETTERS = { "ø": "o", "æ": "ae", "œ": "oe", "ß": "ss", "ł": "l", "đ": "d", "ð": "d", "þ": "th", "ı": "i" };
 
@@ -28,19 +29,24 @@
     // The hash comes from shared links: anything that is not a well-formed season or numeric id is dropped.
     if (state.season && !SEASON_PATTERN.test(state.season)) delete state.season;
     if (state.player && !ID_PATTERN.test(state.player)) delete state.player;
+    if (state.league && !LEAGUE_PATTERN.test(state.league)) delete state.league;
+    // Compare entries are "season~uid", or "league:season~uid" when they come from another league.
     state.compare = state.compare ? state.compare.split(",").filter(Boolean).map((entry) => {
-      const [season, uid] = entry.split("~");
-      return { season, uid };
-    }).filter((entry) => SEASON_PATTERN.test(entry.season || "") && ID_PATTERN.test(entry.uid || "")) : [];
+      const [scope, uid] = entry.split("~");
+      const [league, season] = (scope || "").includes(":") ? scope.split(":") : [undefined, scope];
+      return league ? { league, season, uid } : { season, uid };
+    }).filter((entry) => SEASON_PATTERN.test(entry.season || "") && ID_PATTERN.test(entry.uid || "") && (entry.league === undefined || LEAGUE_PATTERN.test(entry.league))) : [];
     return state;
   }
+
+  const compareKey = (entry) => `${entry.league ? `${entry.league}:` : ""}${entry.season}~${entry.uid}`;
 
   // Only values that differ from `defaults` are written, so plain links stay short.
   function serializeHash(state, defaults = {}) {
     const params = new URLSearchParams();
     for (const [key, param] of Object.entries(HASH_KEYS)) {
       let value = state[key];
-      if (key === "compare") value = (value || []).map((entry) => `${entry.season}~${entry.uid}`).join(",");
+      if (key === "compare") value = (value || []).map(compareKey).join(",");
       if (value === undefined || value === null || value === "" || value === defaults[key]) continue;
       params.set(param, value);
     }
@@ -62,5 +68,5 @@
   const shortcutLabel = (platform) => (/mac|iphone|ipad|ipod/i.test(String(platform || "")) ? "⌘ K" : "Ctrl K");
   const photoUrl = (code) => (code ? `https://resources.premierleague.com/premierleague/photos/players/110x140/p${code}.png` : "");
 
-  globalThis.FPLLib = { RATE_MIN_MINUTES, normalizeText, isRateSort, parseHash, serializeHash, niceTicks, shortcutLabel, photoUrl };
+  globalThis.FPLLib = { RATE_MIN_MINUTES, compareKey, normalizeText, isRateSort, parseHash, serializeHash, niceTicks, shortcutLabel, photoUrl };
 })();

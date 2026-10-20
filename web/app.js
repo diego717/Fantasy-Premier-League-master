@@ -1,10 +1,19 @@
 (() => {
-  const { RATE_MIN_MINUTES, normalizeText, isRateSort, parseHash, serializeHash, niceTicks, shortcutLabel, photoUrl } = window.FPLLib;
+  const { RATE_MIN_MINUTES, compareKey, normalizeText, isRateSort, parseHash, serializeHash, niceTicks, shortcutLabel, photoUrl } = window.FPLLib;
   const MODES = ["fpl", "pl"];
   const PAGE_SIZE = 75;
   const COMPARE_LIMIT = 3;
+  // "pl" mode covers every league: the official Premier League archive plus four Understat leagues.
+  const LEAGUES = [
+    { key: "pl", label: "PREMIER", short: "PL", name: "Premier League", source: "Estadísticas oficiales de la Premier League · desde 2009-10" },
+    { key: "laliga", label: "LALIGA", short: "LALIGA", name: "LaLiga", understat: "La_liga", source: "Datos de Understat · xG desde 2014-15" },
+    { key: "bundesliga", label: "BUNDESLIGA", short: "BUN", name: "Bundesliga", understat: "Bundesliga", source: "Datos de Understat · xG desde 2014-15" },
+    { key: "seriea", label: "SERIE A", short: "SERIE A", name: "Serie A", understat: "Serie_A", source: "Datos de Understat · xG desde 2014-15" },
+    { key: "ligue1", label: "LIGUE 1", short: "L1", name: "Ligue 1", understat: "Ligue_1", source: "Datos de Understat · xG desde 2014-15" },
+  ];
+  const leagueInfo = (key = state.league) => LEAGUES.find((league) => league.key === key) || LEAGUES[0];
 
-  const state = { mode: "fpl", season: null, search: "", club: "all", position: "all", sort: "points", player: null, compare: [] };
+  const state = { mode: "fpl", league: "pl", season: null, search: "", club: "all", position: "all", sort: "points", player: null, compare: [] };
   let active = null; // index entry of the selected season + its players
   let visibleCount = PAGE_SIZE;
   let refreshToken = 0;
@@ -21,8 +30,12 @@
   const formatNumber = (value) => new Intl.NumberFormat("es-AR").format(value);
   const formatCompact = (value) => new Intl.NumberFormat("es-AR", { notation: "compact", maximumFractionDigits: 1 }).format(value);
   const reducedMotion = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  const playerPhoto = (player) => photoUrl(state.mode === "pl" ? player.id : player.code);
-  const careerKey = (player) => String(state.mode === "pl" ? player.id : player.code);
+  // Folder under web/data/ for the active mode: "fpl", "pl" or an Understat league.
+  const dataKey = () => (state.mode === "fpl" ? "fpl" : state.league);
+  const isUnderstat = (key = dataKey()) => Boolean(leagueInfo(key).understat) && key !== "fpl";
+  const playerPhoto = (player, key = dataKey()) => (key === "fpl" ? photoUrl(player.code) : key === "pl" ? photoUrl(player.id) : "");
+  const careerKey = (player) => String(state.mode === "fpl" ? player.code : player.id);
+  const careersPath = () => (isUnderstat() ? "leagues/careers.json" : `${dataKey()}/careers.json`);
   const uidOf = (player) => String(player.id);
 
   function loadJSON(path) {
@@ -35,8 +48,8 @@
     return jsonCache.get(path);
   }
 
-  async function loadSeasonPlayers(mode, season) {
-    const payload = await loadJSON(`${mode}/${season}.json`);
+  async function loadSeasonPlayers(key, season) {
+    const payload = await loadJSON(`${key}/${season}.json`);
     if (!payload._indexed) {
       payload.players.forEach((player) => {
         player._search = normalizeText(`${player.name} ${player.shortName} ${player.club} ${(player.otherClubs || []).join(" ")}`);
@@ -48,9 +61,10 @@
 
   function modeConfig(mode = state.mode) {
     if (mode === "pl") {
+      const league = leagueInfo();
       return {
-        label: "PL",
-        kicker: "PL / LECTURA RÁPIDA",
+        label: league.short,
+        kicker: `${league.short} / LECTURA RÁPIDA`,
         primary: "goals",
         primaryLabel: "GOLES",
         scoreLabel: "GOLES EN LIGA",
@@ -61,7 +75,8 @@
         signalKicker: "CONTRIBUCIÓN OFENSIVA",
         sortOptions: [["goals", "Goles"], ["assists", "Asistencias"], ["appearances", "Apariciones"], ["minutes", "Minutos"], ["expectedGoals", "xG"], ["expectedAssists", "xA"], ["goalsPer90", "Goles / 90'"], ["contributionsPer90", "G+A / 90'"]],
         defaultSort: "goals",
-        compareMetrics: [["goals", "Goles"], ["assists", "Asistencias"], ["appearances", "Apariciones"], ["minutes", "Minutos"], ["expectedGoals", "xG"], ["expectedAssists", "xA"], ["shots", "Tiros"], ["goalsPer90", "Goles / 90'"], ["contributionsPer90", "G+A / 90'"], ["passes", "Pases"], ["tackles", "Entradas"]],
+        // Metrics missing from a source (Understat has no passes or tackles) are dropped when comparing.
+        compareMetrics: [["goals", "Goles"], ["assists", "Asistencias"], ["appearances", "Apariciones"], ["minutes", "Minutos"], ["expectedGoals", "xG"], ["expectedAssists", "xA"], ["nonPenaltyXg", "xG sin penales"], ["shots", "Tiros"], ["keyPasses", "Pases clave"], ["goalsPer90", "Goles / 90'"], ["contributionsPer90", "G+A / 90'"], ["passes", "Pases"], ["tackles", "Entradas"]],
       };
     }
     return {
@@ -86,7 +101,7 @@
   const defaultSeason = (index) => index.seasons.filter((season) => season.status === "final").at(-1)?.season || index.seasons.at(-1).season;
 
   function hashDefaults() {
-    return { mode: "fpl", season: active ? defaultSeason(active.index) : null, search: "", club: "all", position: "all", sort: modeConfig().defaultSort };
+    return { mode: "fpl", league: state.mode === "fpl" ? state.league : "pl", season: active ? defaultSeason(active.index) : null, search: "", club: "all", position: "all", sort: modeConfig().defaultSort };
   }
 
   function syncHash(push = false) {
@@ -98,13 +113,17 @@
   function applyHash() {
     const parsed = parseHash(location.hash);
     state.mode = MODES.includes(parsed.mode) ? parsed.mode : "fpl";
+    state.league = LEAGUES.some((league) => league.key === parsed.league) ? parsed.league : "pl";
     state.season = parsed.season || null;
     state.search = parsed.search || "";
     state.club = parsed.club || "all";
     state.position = ["GK", "DEF", "MID", "FWD"].includes(parsed.position) ? parsed.position : "all";
     state.sort = modeConfig().sortOptions.some(([value]) => value === parsed.sort) ? parsed.sort : modeConfig().defaultSort;
     state.player = parsed.player || null;
-    state.compare = parsed.compare.slice(0, COMPARE_LIMIT);
+    state.compare = parsed.compare
+      .filter((entry) => (state.mode === "fpl" ? !entry.league : LEAGUES.some((league) => league.key === (entry.league || "pl"))))
+      .map((entry) => (state.mode === "fpl" ? entry : { ...entry, league: entry.league || "pl" }))
+      .slice(0, COMPARE_LIMIT);
     visibleCount = PAGE_SIZE;
   }
 
@@ -114,9 +133,9 @@
     const token = ++refreshToken;
     document.body.classList.add("is-loading");
     try {
-      const index = await loadJSON(`${state.mode}/index.json`);
+      const index = await loadJSON(`${dataKey()}/index.json`);
       if (!index.seasons.some((season) => season.season === state.season)) state.season = defaultSeason(index);
-      const players = await loadSeasonPlayers(state.mode, state.season);
+      const players = await loadSeasonPlayers(dataKey(), state.season);
       if (token !== refreshToken) return;
       active = { ...index.seasons.find((season) => season.season === state.season), index, players };
       $("#load-error").hidden = true;
@@ -133,6 +152,7 @@
     });
     $("#search-input").value = state.search;
     $("#position-select").value = state.position;
+    renderLeagueTabs();
     renderSortOptions();
     renderSeasonTabs();
     renderClubOptions();
@@ -174,6 +194,30 @@
     syncHash(true);
   }
 
+  function renderLeagueTabs() {
+    const strip = $("#league-strip");
+    strip.hidden = state.mode !== "pl";
+    if (strip.hidden) return;
+    $("#league-tabs").innerHTML = LEAGUES.map((league) => `<button class="season-tab ${league.key === state.league ? "active" : ""}" data-league="${league.key}" type="button" aria-pressed="${league.key === state.league}">${league.label}</button>`).join("");
+    $("#league-caption").textContent = leagueInfo().source;
+  }
+
+  // The comparator is kept: in league mode it can mix players from different leagues.
+  async function setLeague(league, { season = null, player = null } = {}) {
+    if (!LEAGUES.some((item) => item.key === league)) return;
+    const changed = league !== state.league;
+    state.league = league;
+    state.season = season || state.season;
+    state.player = player;
+    if (changed) {
+      state.club = "all";
+      state.search = "";
+    }
+    visibleCount = PAGE_SIZE;
+    await refresh({ focus: !player });
+    syncHash(true);
+  }
+
   function renderSeasonTabs() {
     const seasons = active.index.seasons;
     $("#season-tabs").innerHTML = seasons.map((season) => `<button class="season-tab ${season.season === state.season ? "active" : ""}" data-season="${season.season}" type="button" aria-pressed="${season.season === state.season}">${season.season.replace("-", " / ")}${season.status === "current" ? " <small>EN CURSO</small>" : ""}</button>`).join("");
@@ -208,8 +252,8 @@
     const config = modeConfig();
     const seasons = active.index.seasons;
     const statCards = state.mode === "pl"
-      ? [["GOLES EN LA LIGA", formatNumber(stats.goals), `${formatNumber(stats.assists)} asistencias`], ["ASISTENCIAS", formatNumber(stats.assists), `${formatNumber(stats.appearances)} apariciones`], ["MINUTOS JUGADOS", formatCompact(stats.minutes), `${stats.clubs} clubes representados`], ["PROMEDIO DE GOLES", stats.avgGoals, `líder: ${season.leaders[0]?.shortName ?? "—"}`]]
-      : [["PUNTOS REGISTRADOS", formatCompact(stats.points), `${stats.players} futbolistas con datos`], ["GOLES EN EL ARCHIVO", formatNumber(stats.goals), `${formatNumber(stats.assists)} asistencias`], ["MINUTOS JUGADOS", formatCompact(stats.minutes), `${stats.clubs} clubes representados`], ["PROMEDIO POR JUGADOR", stats.avgPoints, `líder: ${season.leaders[0]?.shortName ?? "—"}`]];
+      ? [["GOLES EN LA LIGA", formatNumber(stats.goals), `${formatNumber(stats.assists)} asistencias`], ["ASISTENCIAS", formatNumber(stats.assists), `${formatNumber(stats.appearances)} apariciones`], ["MINUTOS JUGADOS", formatCompact(stats.minutes), `${stats.clubs} clubes representados`], ["PROMEDIO DE GOLES", formatNumber(stats.avgGoals), `líder: ${season.leaders[0]?.shortName ?? "—"}`]]
+      : [["PUNTOS REGISTRADOS", formatCompact(stats.points), `${stats.players} futbolistas con datos`], ["GOLES EN EL ARCHIVO", formatNumber(stats.goals), `${formatNumber(stats.assists)} asistencias`], ["MINUTOS JUGADOS", formatCompact(stats.minutes), `${stats.clubs} clubes representados`], ["PROMEDIO POR JUGADOR", formatNumber(stats.avgPoints), `líder: ${season.leaders[0]?.shortName ?? "—"}`]];
     $("#stats-grid").innerHTML = statCards.map(([label, value, context], index) => `<article class="stat-card reveal" style="--delay:${index * 70}ms"><span class="stat-label">${label}</span><strong class="stat-value">${value}</strong><p class="stat-context">${esc(context)}</p></article>`).join("");
     $("#row-count").textContent = `${formatNumber(seasons.reduce((sum, item) => sum + item.stats.players, 0))} perfiles`;
     $("#hero-season-count").textContent = seasons.length;
@@ -247,7 +291,7 @@
   function renderSeasonStories() {
     const season = active;
     const config = modeConfig();
-    const story = state.mode === "pl" ? window.SEASON_STORIES?.[state.season] : window.FPL_STORIES?.[state.season];
+    const story = state.mode === "fpl" ? window.FPL_STORIES?.[state.season] : state.league === "pl" ? window.SEASON_STORIES?.[state.season] : null;
     const archiveLeader = active.index.archiveLeader;
     const seasonGoals = season.topGoals;
     const seasonAssists = season.topAssists;
@@ -272,14 +316,16 @@
           : `El líder de asistencias fue ${seasonAssists?.name ?? "—"}, mientras que ${seasonGoals?.shortName ?? "—"} terminó como máximo goleador con ${formatNumber(seasonGoals?.goals ?? 0)}.`,
       },
     ];
-    $("#stories-badge").textContent = state.mode === "pl" ? "PL" : "FPL";
+    $("#stories-badge").textContent = config.label;
     $("#stories-title").textContent = state.mode === "pl" ? "Lo que dejó la liga" : "Lo que dejó el fantasy";
     $("#season-stories").innerHTML = cards.map((card) => `<article class="season-story"><span class="story-eyebrow">${esc(card.eyebrow)}</span><strong>${esc(card.title)}</strong><p>${esc(card.body)}</p>${card.source ? `<a href="${esc(card.source)}" target="_blank" rel="noreferrer">FUENTE OFICIAL <span>↗</span></a>` : ""}</article>`).join("");
   }
 
   function renderRandomFact() {
-    const facts = window.RANDOM_FACTS?.[state.mode] || [];
-    if (!facts.length || !$("#random-fact")) return;
+    // The curated facts only cover FPL and the Premier League.
+    const facts = (state.mode === "fpl" || state.league === "pl") ? window.RANDOM_FACTS?.[state.mode] || [] : [];
+    $("#random-fact").hidden = !facts.length;
+    if (!facts.length) return;
     const history = randomFactHistory[state.mode];
     let available = facts.map((_, index) => index).filter((index) => !history.includes(index));
     if (!available.length) {
@@ -302,15 +348,24 @@
 
   async function renderFixture() {
     const season = state.season;
-    const officialUrl = `https://www.premierleague.com/en/matches/premier-league/${encodeURIComponent(season)}/matchweek-1`;
-    const fixtureData = await loadJSON(`fixtures/${season}.json`).catch(() => null);
-    if (season !== state.season) return;
+    const key = dataKey();
+    const league = leagueInfo(key);
+    const understat = isUnderstat(key);
+    const officialUrl = understat
+      ? `https://understat.com/league/${league.understat}/${season.slice(0, 4)}`
+      : `https://www.premierleague.com/en/matches/premier-league/${encodeURIComponent(season)}/matchweek-1`;
+    // FPL and the Premier League share one calendar; each Understat league has its own.
+    const fixtureData = await loadJSON(understat ? `${key}/fixtures/${season}.json` : `fixtures/${season}.json`).catch(() => null);
+    if (season !== state.season || key !== dataKey()) return;
+    $("#fixture-official-link").firstChild.textContent = understat ? "VER EN UNDERSTAT " : "VER EN PREMIERLEAGUE.COM ";
+    $("#fixture-source-link").hidden = understat;
     const availableWeeks = fixtureData ? [...new Set(fixtureData.matches.map((match) => match.event))].sort((a, b) => a - b) : [];
     fixtureWeek = availableWeeks.includes(fixtureWeek) ? fixtureWeek : (availableWeeks[0] || 1);
     $("#fixture-badge").textContent = fixtureData ? `${availableWeeks.length} MW` : "LINK";
     $("#fixture-intro").textContent = fixtureData
       ? (active.status === "current" ? "Calendario cargado · fechas sujetas a cambios." : "Calendario cargado · resultados y horarios de la temporada.")
       : "Todavía no hay datos locales para esta temporada; podés abrir el calendario oficial.";
+    if (fixtureData && understat) $("#fixture-intro").textContent += " Jornadas deducidas por orden de partido: los postergados figuran cuando se jugaron.";
     $("#fixture-official-link").href = officialUrl;
     $("#fixture-source-link").href = window.FIXTURE_SOURCES?.[season] || officialUrl;
     $("#fixture-week-select").innerHTML = availableWeeks.length
@@ -339,7 +394,7 @@
       ? `${leader.club} · ${leader.position} · ${formatNumber(leader.assists)} asistencias`
       : `${leader.club} · ${leader.position} · ${formatNumber(leader.goals)} goles`;
     $("#leader-name").textContent = leader.shortName;
-    $("#featured-body").innerHTML = `<div class="featured-copy"><strong class="featured-stat">${formatNumber(leader[config.primary])}</strong><span class="featured-label">${config.scoreLabel}</span><p class="featured-meta">${esc(meta)}</p><button class="featured-open" type="button" data-open-player="${uidOf(leader)}">VER PERFIL <span>↗</span></button></div><img class="featured-photo" src="${esc(playerPhoto(leader))}" alt="${esc(leader.name)}" loading="lazy" data-fallback="hide">`;
+    $("#featured-body").innerHTML = `<div class="featured-copy"><strong class="featured-stat">${formatNumber(leader[config.primary])}</strong><span class="featured-label">${config.scoreLabel}</span><p class="featured-meta">${esc(meta)}</p><button class="featured-open" type="button" data-open-player="${uidOf(leader)}">VER PERFIL <span>↗</span></button></div>${playerPhoto(leader) ? `<img class="featured-photo" src="${esc(playerPhoto(leader))}" alt="${esc(leader.name)}" loading="lazy" data-fallback="hide">` : `<span class="featured-initials" aria-hidden="true">${esc(initials(leader.name))}</span>`}`;
   }
 
   // ---------------------------------------------------------------- scatter
@@ -553,8 +608,8 @@
     return `<div class="meter-line"><span>${label}</span><div class="meter-track"><i style="width:${width}%"></i></div></div>`;
   }
 
-  function avatar(player, className) {
-    const photo = playerPhoto(player);
+  function avatar(player, className, key = dataKey()) {
+    const photo = playerPhoto(player, key);
     const fallback = esc(initials(player.name));
     return photo
       ? `<img class="${className}" src="${esc(photo)}" alt="" loading="lazy" data-fallback="initials" data-initials="${fallback}">`
@@ -714,32 +769,37 @@
     container.innerHTML = `<p class="drawer-empty">Cargando trayectoria…</p>`;
     let careers;
     try {
-      careers = await loadJSON(`${state.mode}/careers.json`);
+      careers = await loadJSON(careersPath());
     } catch {
       if (token === drawerToken) container.innerHTML = `<p class="drawer-empty">No pudimos cargar la trayectoria.</p>`;
       return;
     }
     if (token !== drawerToken) return;
     const fields = careers.fields;
-    const rows = (careers.players[careerKey(player)] || []).map((row) => Object.fromEntries(fields.map((field, index) => [field, row[index]])));
-    $("#career-meta").textContent = `${rows.length} ${rows.length === 1 ? "temporada" : "temporadas"} · ${formatNumber(rows.reduce((sum, row) => sum + (row[config.primary] || 0), 0))} total`;
+    // Understat careers span the four leagues; FPL and PL rows have no `league`.
+    const rows = (careers.players[careerKey(player)] || []).map((row) => ({ league: dataKey(), ...Object.fromEntries(fields.map((field, index) => [field, row[index]])) }));
+    const leaguesPlayed = [...new Set(rows.map((row) => row.league))];
+    const crossLeague = leaguesPlayed.length > 1;
+    $("#career-meta").textContent = `${rows.length} ${rows.length === 1 ? "temporada" : "temporadas"}${crossLeague ? ` · ${leaguesPlayed.length} ligas` : ""} · ${formatNumber(rows.reduce((sum, row) => sum + (row[config.primary] || 0), 0))} total`;
     if (rows.length < 2) {
-      container.innerHTML = `<p class="drawer-empty">Es su única temporada en el archivo ${config.label}.</p>`;
+      container.innerHTML = `<p class="drawer-empty">Es su única temporada en el archivo ${esc(config.label)}.</p>`;
       return;
     }
     const max = Math.max(...rows.map((row) => row[config.primary]), 1);
     const best = rows.reduce((top, row) => (row[config.primary] > top[config.primary] ? row : top), rows[0]);
     container.innerHTML = rows.map((row) => {
       const value = row[config.primary];
-      const isCurrent = row.season === state.season;
+      const isCurrent = row.season === state.season && row.league === dataKey();
       const showValue = isCurrent || row === best;
-      return `<button type="button" class="career-bar ${isCurrent ? "is-active" : ""} ${showValue ? "show-value" : ""}" data-season="${row.season}" data-uid="${row.id}" aria-label="${row.season}, ${esc(row.club)}: ${formatNumber(value)} ${config.primaryLabel.toLowerCase()}${isCurrent ? " (temporada abierta)" : ". Abrir esa temporada"}" ${isCurrent ? "aria-current=\"true\"" : ""}>
+      const where = crossLeague ? `${leagueInfo(row.league).name} · ${row.club}` : row.club;
+      return `<button type="button" class="career-bar ${isCurrent ? "is-active" : ""} ${showValue ? "show-value" : ""} ${row.league !== dataKey() ? "is-other-league" : ""}" data-league="${esc(row.league)}" data-season="${esc(row.season)}" data-uid="${esc(row.id)}" aria-label="${esc(row.season)}, ${esc(where)}: ${formatNumber(value)} ${config.primaryLabel.toLowerCase()}${isCurrent ? " (temporada abierta)" : ". Abrir esa temporada"}" ${isCurrent ? "aria-current=\"true\"" : ""}>
         <span class="career-value">${formatNumber(value)}</span>
         <span class="career-fill" style="--h:${Math.max(4, Math.round((value / max) * 100))}%"></span>
-        <span class="career-season">${row.season.slice(2)}</span>
-        <span class="chart-tip">${row.season} · ${esc(row.club)}<strong>${formatNumber(value)} ${config.primaryLabel.toLowerCase()}</strong></span>
+        <span class="career-season">${esc(row.season.slice(2))}</span>
+        <span class="chart-tip">${esc(row.season)} · ${esc(where)}<strong>${formatNumber(value)} ${config.primaryLabel.toLowerCase()}</strong></span>
       </button>`;
     }).join("");
+    if (crossLeague) container.insertAdjacentHTML("beforeend", `<p class="career-legend"><i></i>Barras huecas: temporadas en otra liga</p>`);
   }
 
   async function renderGameweeks(player, token) {
@@ -789,7 +849,10 @@
 
   // ---------------------------------------------------------------- compare
 
-  const inCompare = (player) => state.compare.some((entry) => entry.season === state.season && entry.uid === uidOf(player));
+  // In league mode entries carry their league, so one comparison can mix leagues.
+  const entryFor = (player) => (state.mode === "fpl" ? { season: state.season, uid: uidOf(player) } : { league: state.league, season: state.season, uid: uidOf(player) });
+  const inCompare = (player) => state.compare.some((entry) => compareKey(entry) === compareKey(entryFor(player)));
+  const entryLabel = (entry) => (entry.league && entry.league !== state.league ? `${leagueInfo(entry.league).short} ${entry.season}` : entry.season);
 
   function renderCompareToggle(player) {
     const button = $("#compare-toggle");
@@ -804,8 +867,9 @@
   function toggleCompare() {
     const player = active.players.find((item) => uidOf(item) === state.player);
     if (!player) return;
-    if (inCompare(player)) state.compare = state.compare.filter((entry) => !(entry.season === state.season && entry.uid === uidOf(player)));
-    else if (state.compare.length < COMPARE_LIMIT) state.compare = [...state.compare, { season: state.season, uid: uidOf(player) }];
+    const key = compareKey(entryFor(player));
+    if (inCompare(player)) state.compare = state.compare.filter((entry) => compareKey(entry) !== key);
+    else if (state.compare.length < COMPARE_LIMIT) state.compare = [...state.compare, entryFor(player)];
     renderCompareToggle(player);
     renderCompareTray();
     syncHash();
@@ -813,7 +877,7 @@
 
   async function resolveCompare() {
     const resolved = await Promise.all(state.compare.map(async (entry) => {
-      const players = await loadSeasonPlayers(state.mode, entry.season).catch(() => []);
+      const players = await loadSeasonPlayers(entry.league || dataKey(), entry.season).catch(() => []);
       const player = players.find((item) => uidOf(item) === entry.uid);
       return player ? { ...entry, player } : null;
     }));
@@ -824,12 +888,12 @@
     const tray = $("#compare-tray");
     const entries = await resolveCompare();
     if (entries.length !== state.compare.length) {
-      state.compare = entries.map(({ season, uid }) => ({ season, uid }));
+      state.compare = entries.map(({ player, ...entry }) => entry);
       syncHash();
     }
     tray.hidden = entries.length === 0;
     document.body.classList.toggle("has-compare", entries.length > 0);
-    $("#compare-chips").innerHTML = entries.map((entry) => `<span class="compare-chip">${avatar(entry.player, "compare-chip-avatar")}<span><strong>${esc(entry.player.shortName)}</strong><small>${esc(entry.season)}</small></span><button type="button" data-remove="${esc(`${entry.season}~${entry.uid}`)}" aria-label="Quitar a ${esc(entry.player.name)} (${esc(entry.season)}) del comparador">×</button></span>`).join("");
+    $("#compare-chips").innerHTML = entries.map((entry) => `<span class="compare-chip">${avatar(entry.player, "compare-chip-avatar", entry.league || dataKey())}<span><strong>${esc(entry.player.shortName)}</strong><small>${esc(entryLabel(entry))}</small></span><button type="button" data-remove="${esc(compareKey(entry))}" aria-label="Quitar a ${esc(entry.player.name)} (${esc(entryLabel(entry))}) del comparador">×</button></span>`).join("");
     $("#compare-open").disabled = entries.length < 2;
     $("#compare-open").innerHTML = entries.length < 2 ? "ELEGÍ OTRO JUGADOR" : `COMPARAR ${entries.length} <span>↗</span>`;
   }
@@ -839,8 +903,9 @@
     if (entries.length < 2) return;
     const config = modeConfig();
     lastFocus = document.activeElement;
-    const head = `<div class="compare-row compare-head" style="--cols:${entries.length}"><span></span>${entries.map((entry) => `<div class="compare-player">${avatar(entry.player, "compare-avatar")}<div><strong>${esc(entry.player.name)}</strong><small>${esc(entry.player.club)} · ${esc(entry.player.position)} · ${esc(entry.season)}</small></div></div>`).join("")}</div>`;
-    const rows = config.compareMetrics.map(([key, label, rankable = true]) => {
+    const head = `<div class="compare-row compare-head" style="--cols:${entries.length}"><span></span>${entries.map((entry) => `<div class="compare-player">${avatar(entry.player, "compare-avatar", entry.league || dataKey())}<div><strong>${esc(entry.player.name)}</strong><small>${esc(entry.player.club)} · ${esc(entry.player.position)} · ${esc(entry.league ? `${leagueInfo(entry.league).name} ${entry.season}` : entry.season)}</small></div></div>`).join("")}</div>`;
+    const leagues = new Set(entries.map((entry) => entry.league).filter(Boolean));
+    const rows = config.compareMetrics.filter(([key]) => entries.every((entry) => key in entry.player)).map(([key, label, rankable = true]) => {
       // Rates under the minutes threshold are not comparable: shown as "—" and left out of the ranking.
       const values = entries.map((entry) => (isRateSort(key) && entry.player.minutes < RATE_MIN_MINUTES ? null : Number(entry.player[key]) || 0));
       const numbers = values.filter((value) => value !== null);
@@ -851,7 +916,7 @@
         return `<div class="compare-cell ${isBest ? "is-best" : ""}"><strong>${formatNumber(value)}${isBest ? '<span class="sr-only"> (mejor)</span>' : ""}</strong><span class="compare-track"><i style="width:${max ? Math.max(2, (value / max) * 100) : 0}%"></i></span></div>`;
       }).join("")}</div>`;
     }).join("");
-    $("#compare-mode").textContent = `${config.label} · ${entries.length} JUGADORES`;
+    $("#compare-mode").textContent = `${leagues.size > 1 ? "LIGAS" : config.label} · ${entries.length} JUGADORES`;
     $("#compare-table").innerHTML = head + rows;
     const panel = $("#compare-panel");
     showBackdrop();
@@ -875,6 +940,7 @@
   function wireControls() {
     $("#search-kbd").textContent = shortcutLabel(navigator.userAgentData?.platform || navigator.platform);
     $("#mode-switch").addEventListener("click", (event) => { const button = event.target.closest(".mode-button"); if (button) setMode(button.dataset.mode); });
+    $("#league-tabs").addEventListener("click", (event) => { const button = event.target.closest("[data-league]"); if (button && button.dataset.league !== state.league) setLeague(button.dataset.league); });
     $("#season-tabs").addEventListener("click", (event) => { const button = event.target.closest(".season-tab"); if (button) setSeason(button.dataset.season, { focus: true }); });
     $("#season-select").addEventListener("change", (event) => setSeason(event.target.value));
     $("#search-input").addEventListener("input", (event) => { state.search = event.target.value; visibleCount = PAGE_SIZE; renderPlayers(); syncHash(); });
@@ -924,13 +990,15 @@
 
     $("#drawer-career").addEventListener("click", (event) => {
       const bar = event.target.closest(".career-bar");
-      if (bar && bar.dataset.season !== state.season) setSeason(bar.dataset.season, { player: bar.dataset.uid });
+      if (!bar || bar.hasAttribute("aria-current")) return;
+      if (state.mode === "pl" && bar.dataset.league !== state.league) setLeague(bar.dataset.league, { season: bar.dataset.season, player: bar.dataset.uid });
+      else setSeason(bar.dataset.season, { player: bar.dataset.uid });
     });
     $("#compare-toggle").addEventListener("click", toggleCompare);
     $("#compare-chips").addEventListener("click", (event) => {
       const button = event.target.closest("[data-remove]");
       if (!button) return;
-      state.compare = state.compare.filter((entry) => `${entry.season}~${entry.uid}` !== button.dataset.remove);
+      state.compare = state.compare.filter((entry) => compareKey(entry) !== button.dataset.remove);
       renderCompareTray();
       syncHash();
     });

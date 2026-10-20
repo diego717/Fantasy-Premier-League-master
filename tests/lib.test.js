@@ -22,6 +22,14 @@ test("hash round-trips state and drops defaults", () => {
   assert.equal(serializeHash({ ...defaults, season: "2019-20", compare: [] }, defaults), "#season=2019-20");
 });
 
+test("compare entries can carry their league", () => {
+  const state = { mode: "pl", league: "laliga", compare: [{ league: "laliga", season: "2025-26", uid: "3423" }, { league: "pl", season: "2025-26", uid: "223094" }] };
+  const hash = serializeHash(state, { mode: "fpl" });
+  assert.equal(hash, "#mode=pl&liga=laliga&cmp=laliga%3A2025-26%7E3423%2Cpl%3A2025-26%7E223094");
+  assert.deepEqual(parseHash(hash), { ...state });
+  assert.deepEqual(parseHash("#liga=<x>&cmp=LA LIGA:2025-26~1").compare, []);
+});
+
 test("parseHash tolerates junk", () => {
   assert.deepEqual(parseHash(""), { compare: [] });
   assert.deepEqual(parseHash("#cmp=bad,,2020-21~3"), { compare: [{ season: "2020-21", uid: "3" }] });

@@ -53,10 +53,10 @@ class HelperTests(unittest.TestCase):
 
 
 class GeneratedDataTests(unittest.TestCase):
-    def check_mode(self, mode: str, primary: str):
+    def check_mode(self, mode: str, primary: str, clubs: tuple[int, ...] = (20,)):
         index = load(f"{mode}/index.json")
         self.assertGreater(len(index["seasons"]), 5)
-        careers = load(f"{mode}/careers.json")
+        careers = load("leagues/careers.json" if mode not in ("fpl", "pl") else f"{mode}/careers.json")
         for summary in index["seasons"]:
             season = summary["season"]
             with self.subTest(mode=mode, season=season):
@@ -64,7 +64,7 @@ class GeneratedDataTests(unittest.TestCase):
                 ids = [player["id"] for player in players]
                 self.assertEqual(len(ids), len(set(ids)), "one row per player and season")
                 self.assertEqual(summary["stats"]["players"], len(players))
-                self.assertEqual(summary["stats"]["clubs"], 20)
+                self.assertIn(summary["stats"]["clubs"], clubs)
                 self.assertEqual(sum(club["players"] for club in summary["clubs"]), len(players))
                 self.assertEqual(summary["stats"][primary], sum(player[primary] for player in players))
                 self.assertEqual(summary["leaders"][0][primary], max(player[primary] for player in players))
@@ -76,6 +76,21 @@ class GeneratedDataTests(unittest.TestCase):
 
     def test_pl_data(self):
         self.check_mode("pl", "goals")
+
+    def test_understat_leagues(self):
+        for league in ("laliga", "bundesliga", "seriea", "ligue1"):
+            self.check_mode(league, "goals", clubs=(18, 20))
+            for summary in load(f"{league}/index.json")["seasons"]:
+                fixtures = load(f"{league}/fixtures/{summary['season']}.json")
+                self.assertEqual(len(fixtures["teams"]), summary["stats"]["clubs"])
+                self.assertEqual(len(fixtures["matches"]), summary["stats"]["clubs"] * (summary["stats"]["clubs"] - 1))
+
+    def test_understat_careers_cover_every_player(self):
+        careers = load("leagues/careers.json")["players"]
+        for league in ("laliga", "bundesliga", "seriea", "ligue1"):
+            season = load(f"{league}/index.json")["seasons"][-1]["season"]
+            for player in load(f"{league}/{season}.json")["players"]:
+                self.assertIn([league, season], [row[:2] for row in careers[str(player["id"])]])
 
     def test_fpl_gameweeks_add_up_to_season_points(self):
         index = load("fpl/index.json")
