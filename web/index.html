@@ -20,19 +20,24 @@
         <span class="brand-word">DATA LAB</span>
       </a>
       <div class="mode-switch" id="mode-switch" role="group" aria-label="Cambiar fuente estadística">
-        <button class="mode-button active" data-mode="fpl" type="button">FPL <small>FANTASY</small></button>
-        <button class="mode-button" data-mode="pl" type="button">PL <small>LIGA</small></button>
+        <button class="mode-button active" data-mode="fpl" type="button" aria-pressed="true">FPL <small>FANTASY</small></button>
+        <button class="mode-button" data-mode="pl" type="button" aria-pressed="false">PL <small>LIGA</small></button>
       </div>
       <div class="header-meta">
         <span class="live-dot"></span>
         <span>ARCHIVO HISTÓRICO</span>
         <span class="header-divider"></span>
-        <span id="row-count">2.582 perfiles</span>
+        <span id="row-count">— perfiles</span>
       </div>
       <a class="source-link" href="https://github.com/vaastav/Fantasy-Premier-League" target="_blank" rel="noreferrer">FUENTE <span>↗</span></a>
     </header>
 
     <main id="top">
+      <div class="load-error shell" id="load-error" role="alert" hidden>
+        <strong>No se pudieron cargar los datos</strong>
+        <p id="load-error-detail">—</p>
+        <code>python -m http.server 8765 --directory web</code>
+      </div>
       <section class="hero shell">
         <div class="hero-copy reveal" style="--delay: 0ms">
           <p class="eyebrow"><span class="eyebrow-line"></span> FANTASY PREMIER LEAGUE / SCOUTING CONSOLE</p>
@@ -100,13 +105,25 @@
           </article>
         </div>
 
+        <article class="panel scatter-panel reveal" style="--delay: 160ms">
+          <div class="panel-heading"><div><p class="panel-kicker" id="scatter-kicker">VALOR FPL</p><h3 id="scatter-title">Precio contra puntos</h3></div><span class="panel-badge" id="scatter-badge">—</span></div>
+          <p class="scatter-intro" id="scatter-intro">—</p>
+          <div class="scatter-layout">
+            <div class="scatter-chart" id="scatter-chart"></div>
+            <div class="scatter-side">
+              <div class="scatter-legend" id="scatter-legend"></div>
+              <ol class="scatter-list" id="scatter-list"></ol>
+            </div>
+          </div>
+        </article>
+
         <div class="explorer-heading reveal" style="--delay: 120ms">
-          <div><p class="eyebrow" id="explorer-kicker"><span class="eyebrow-line"></span> 02 / EXPLORADOR</p><h2>ENCONTRÁ<br /><em>TU SEÑAL</em></h2></div>
+          <div><p class="eyebrow" id="explorer-kicker"><span class="eyebrow-line"></span> 03 / EXPLORADOR</p><h2>ENCONTRÁ<br /><em>TU SEÑAL</em></h2></div>
           <div class="result-count" id="result-count">— perfiles</div>
         </div>
 
         <div class="filters panel reveal" style="--delay: 180ms">
-          <label class="search-field"><span class="field-icon">⌕</span><input id="search-input" type="search" placeholder="Buscar jugador..." autocomplete="off" /><kbd>⌘ K</kbd></label>
+          <label class="search-field"><span class="field-icon">⌕</span><input id="search-input" type="search" placeholder="Buscar jugador..." autocomplete="off" /><kbd id="search-kbd">Ctrl K</kbd></label>
           <label class="select-field"><span>TEMPORADA</span><select id="season-select"></select></label>
           <label class="select-field"><span>CLUB</span><select id="club-select"><option value="all">Todos los clubes</option></select></label>
           <label class="select-field"><span>POSICIÓN</span><select id="position-select"><option value="all">Todas</option><option value="GK">GK</option><option value="DEF">DEF</option><option value="MID">MID</option><option value="FWD">FWD</option></select></label>
@@ -118,6 +135,7 @@
           <section class="player-section">
             <div class="list-header"><span id="player-header">JUGADOR</span><span id="club-header">CLUB / POS.</span><span id="primary-header">PUNTOS</span><span id="signal-header">SEÑALES</span><span id="profile-header">PERFIL</span></div>
             <div id="player-list" class="player-list"></div>
+            <div class="list-more" id="list-more"><span id="list-status" aria-live="polite">—</span><button class="button button-secondary" id="load-more" type="button">VER MÁS</button></div>
             <div id="empty-state" class="empty-state" hidden><span>∅</span><h3>No encontramos esa señal</h3><p>Probá con otro nombre, club o combinación de filtros.</p><button class="button button-secondary" id="empty-reset" type="button">VER TODOS</button></div>
           </section>
           <aside class="club-panel panel reveal" style="--delay: 240ms">
@@ -138,20 +156,43 @@
     <footer class="site-footer shell"><span>FPL DATA LAB / EXPLORADOR HISTÓRICO</span><span>HECHO CON DATOS ABIERTOS · 2016—27</span></footer>
 
     <div class="modal-backdrop" id="modal-backdrop" hidden></div>
-    <aside class="player-drawer" id="player-drawer" aria-hidden="true" aria-labelledby="drawer-name" role="dialog">
+    <aside class="player-drawer" id="player-drawer" aria-hidden="true" aria-labelledby="drawer-name" aria-modal="true" role="dialog">
       <button class="drawer-close" id="drawer-close" type="button" aria-label="Cerrar detalle">×</button>
       <div class="drawer-topline"><span class="panel-kicker">PERFIL DE JUGADOR</span><span id="drawer-season">—</span></div>
       <div class="drawer-identity"><div class="drawer-avatar" id="drawer-avatar"><span></span></div><div><p id="drawer-position">—</p><h2 id="drawer-name">—</h2><p id="drawer-club">—</p></div></div>
       <div class="drawer-score"><span id="drawer-score-label">PUNTOS TOTALES</span><strong id="drawer-points">—</strong><span class="score-rule"></span></div>
+      <button class="compare-toggle" id="compare-toggle" type="button" aria-pressed="false">AÑADIR AL COMPARADOR <span>+</span></button>
       <div class="drawer-metrics" id="drawer-metrics"></div>
+      <p class="drawer-rate-note" id="drawer-rate-note"></p>
+      <section class="drawer-section" aria-labelledby="career-kicker">
+        <div class="drawer-section-head"><span class="panel-kicker" id="career-kicker">TRAYECTORIA</span><span id="career-meta"></span></div>
+        <div class="career-chart" id="drawer-career"></div>
+      </section>
+      <section class="drawer-section" id="drawer-gws-section" aria-labelledby="gws-kicker">
+        <div class="drawer-section-head"><span class="panel-kicker" id="gws-kicker">JORNADA A JORNADA · PUNTOS</span><span id="gws-meta"></span></div>
+        <div class="gw-chart" id="drawer-gws" role="img" aria-label="Puntos por jornada"></div>
+      </section>
       <div class="drawer-signal"><div><span class="panel-kicker" id="drawer-signal-kicker">SEÑAL DE ATAQUE</span><strong id="drawer-signal-label">—</strong></div><div class="signal-radar"><i id="signal-arc"></i><b id="signal-value">—</b></div></div>
       <p class="drawer-footnote">Las fotos se cargan desde el CDN oficial de Premier League cuando están disponibles. Si una imagen no existe, mostramos las iniciales.</p>
     </aside>
 
-    <script src="data.js"></script>
-    <script src="pl_data.js"></script>
+    <aside class="compare-panel" id="compare-panel" role="dialog" aria-modal="true" aria-labelledby="compare-title" aria-hidden="true" hidden>
+      <button class="drawer-close" id="compare-close" type="button" aria-label="Cerrar comparador">×</button>
+      <div class="drawer-topline"><span class="panel-kicker">COMPARADOR</span><span id="compare-mode">—</span></div>
+      <h2 class="compare-title" id="compare-title">CARA <em>A CARA</em></h2>
+      <div class="compare-table" id="compare-table"></div>
+      <p class="drawer-footnote">En verde, el mejor valor de cada fila. Precio y porcentaje de elección se muestran sin ranking.</p>
+    </aside>
+
+    <div class="compare-tray" id="compare-tray" hidden>
+      <span class="compare-tray-label">COMPARADOR</span>
+      <div class="compare-chips" id="compare-chips"></div>
+      <button class="compare-clear" id="compare-clear" type="button">VACIAR</button>
+      <button class="button button-primary compare-open" id="compare-open" type="button">COMPARAR</button>
+    </div>
+
+    <script src="lib.js"></script>
     <script src="season_stories.js"></script>
-    <script src="fixtures_data.js"></script>
     <script src="app.js"></script>
   </body>
 </html>

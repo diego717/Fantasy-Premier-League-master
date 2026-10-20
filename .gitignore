@@ -1,3 +1,5 @@
 .vscode
 __pycache__
 .venv
+# Output of teams_scraper.py
+team_*_data*/

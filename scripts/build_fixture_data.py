@@ -2,7 +2,8 @@
 
 The source archive mirrors the Fantasy Premier League fixture endpoint by
 season. Only the fields needed by the UI are kept so the static site can show
-the calendar without making a browser-side request.
+the calendar without calling a third-party API from the browser. Each season is
+written to web/data/fixtures/<season>.json and fetched only when selected.
 """
 
 from __future__ import annotations
@@ -15,9 +16,10 @@ from pathlib import Path
 
 import requests
 
+from common import WEB_DATA_DIR, write_json
 
 ROOT = Path(__file__).resolve().parents[1]
-OUTPUT = ROOT / "web" / "fixtures_data.js"
+OUTPUT_DIR = WEB_DATA_DIR / "fixtures"
 SOURCE_ROOT = "https://raw.githubusercontent.com/vaastav/Fantasy-Premier-League/master/data"
 OFFICIAL_API = "https://footballapi.pulselive.com/football"
 SEASONS = [f"{year}-{str(year + 1)[-2:]}" for year in range(2009, 2027)]
@@ -209,20 +211,12 @@ def build_season(season: str) -> dict | None:
 
 
 def main() -> None:
-    fixtures = {}
     for season in SEASONS:
         data = build_season(season)
         if data:
-            fixtures[season] = data
+            write_json(OUTPUT_DIR / f"{season}.json", data)
             print(f"{season}: {len(data['matches'])} matches")
-
-    OUTPUT.write_text(
-        "window.FIXTURE_DATA = "
-        + json.dumps(fixtures, ensure_ascii=False, separators=(",", ":"))
-        + ";\n",
-        encoding="utf-8",
-    )
-    print(f"Wrote {OUTPUT}")
+    print(f"Wrote {OUTPUT_DIR}")
 
 
 if __name__ == "__main__":

@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 import requests
 import json
 
@@ -13,9 +13,9 @@ def get_recent_gameweek_id():
 
     gameweeks = data['events']
     
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     for gameweek in gameweeks:
-        next_deadline_date = datetime.strptime(gameweek['deadline_time'], '%Y-%m-%dT%H:%M:%SZ')
+        next_deadline_date = datetime.strptime(gameweek["deadline_time"], "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
         if next_deadline_date > now:
             return gameweek['id'] - 1
 

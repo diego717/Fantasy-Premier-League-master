@@ -41,22 +41,59 @@ If you use data from here for your website or blog posts, then I would humbly re
 
 ## Interactive dashboard
 
-This repository now includes a local, dependency-free web explorer in `web/`. It uses the historical CSV exports for seasons 2016-17 through 2026-27 and provides:
+The repository includes a local, dependency-free web explorer in `web/`. It covers FPL seasons 2016-17 through 2026-27 and the Premier League archive (`data/pl/`) from 2009-10 through 2026-27, and provides:
 
-- season switching, player search, club and position filters;
-- sorting by points, goals, assists, points per game, minutes or ICT index;
-- club rankings and a player detail drawer with lazy-loaded Premier League photos;
-- responsive layout, reduced-motion support and initials fallbacks when a photo is unavailable.
+- an `FPL / PL` switch: FPL uses fantasy points, price and ICT; PL uses goals, assists, appearances, minutes, xG and xA;
+- season switching, accent-insensitive player search (`odegaard` finds Ødegaard), club and position filters, and a "load more" list;
+- value metrics: points per £m and points per 90' (FPL), goals and goal contributions per 90' (PL). Rates only rank players with 450+ minutes;
+- a scatter per season: price vs points (FPL), goals vs xG (PL), or shots vs goals for seasons without xG;
+- a player drawer with a season-by-season career chart (click a season to jump to it) and, for FPL, a gameweek-by-gameweek chart;
+- a comparator for up to three players, even from different seasons;
+- shareable URLs: mode, season, filters, the open player and the comparator live in the URL hash, and the browser back button works;
+- keyboard support (rows open with Enter, the drawer traps focus and returns it on close, `Ctrl K` / `⌘ K` focuses the search), responsive layout and reduced-motion support.
 
-The browser dataset is generated from the source CSVs:
+The 2026-27 data is a current-season snapshot and is labeled `EN CURSO` in the interface.
+
+### Running it
+
+The page loads its data with `fetch`, so it has to be served over HTTP (opening `index.html` directly shows a warning):
 
 ```powershell
-.\\.venv\\Scripts\\python.exe scripts\\build_dashboard_data.py
-.\\.venv\\Scripts\\python.exe scripts\\build_pl_dashboard_data.py
-.\\.venv\\Scripts\\python.exe -m http.server 8765 --directory web
+.\.venv\Scripts\python.exe -m http.server 8765 --directory web
 ```
 
-Then open `http://localhost:8765`. The interface now has an `FPL / PL` switch: FPL keeps fantasy points and ICT metrics, while PL uses goals, assists, appearances, minutes, xG and xA. The PL archive lives in `data/pl/` and covers 2009-10 through 2026-27. The 2026-27 data is a current-season snapshot and is labeled `EN CURSO` in the interface. The `.venv` was installed with modern compatible versions from `requirements.txt`; the original pins targeted Python versions from 2019 and do not build on Python 3.14.
+Then open `http://localhost:8765`.
+
+### Rebuilding the data
+
+Everything the page reads lives in `web/data/`, split so the browser only downloads what it shows (about 500 KB uncompressed on first load, code included):
+
+| File | Contents |
+| --- | --- |
+| `fpl/index.json`, `pl/index.json` | season summaries, club tables, leaders |
+| `fpl/<season>.json`, `pl/<season>.json` | every player of one season |
+| `fpl/careers.json`, `pl/careers.json` | each player's season-by-season line, keyed by the stable player code |
+| `fpl/gws/<season>.json` | points, minutes, goals and assists per gameweek |
+| `fixtures/<season>.json` | the season calendar |
+
+```powershell
+.\.venv\Scripts\python.exe scripts\build_all.py                  # rebuild everything
+.\.venv\Scripts\python.exe scripts\build_all.py --fetch-current  # refresh 2026-27 from the FPL API first
+.\.venv\Scripts\python.exe scripts\build_all.py --skip-fixtures  # offline: keep the fixture files
+```
+
+`build_all.py` also downloads the `merged_gw.csv` files for 2020-21 through 2025-26 from this repository's upstream when they are missing (`scripts/download_archive_gws.py`). The current season comes from `scripts/fetch_current_season.py`, which reads `bootstrap-static` and one `event/<gw>/live/` request per gameweek. The current season name is `CURRENT_SEASON` in `scripts/common.py`.
+
+Two source quirks are handled by the builders: the PL archive repeats a loaned or transferred player's full season under every club he was registered with (the row is merged and the FPL club decides when available; the others appear as "también …"), and club names are normalized across sources and seasons (`A Villa` → `Aston Villa`, `Ipswich Town` → `Ipswich`, …).
+
+### Tests
+
+```powershell
+.\.venv\Scripts\python.exe -m unittest discover tests   # builder helpers + checks on web/data
+node --test tests\lib.test.js                               # search, URL state and chart helpers
+```
+
+The `Fetch Data` GitHub Action runs `build_all.py --fetch-current` and the Python tests twice a week during the season and commits the result.
 
 ## Downloading Your Team Data
 
@@ -67,7 +104,7 @@ python teams_scraper.py <team_id>
 #Eg: python teams_scraper.py 4582
 ```
 
-This will create a new folder called "team_<team_id>_data18-19" with individual files of all the important data
+This will create a new folder called "team_<team_id>_data18-19" with individual files of all the important data (ignored by git).
 
 ## Notable Usages of this Repository
 

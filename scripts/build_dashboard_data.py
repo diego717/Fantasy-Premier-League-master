@@ -1,27 +1,38 @@
-"""Build the compact, browser-friendly dataset used by the FPL dashboard.
+"""Build the browser-friendly FPL dataset used by the dashboard.
 
 The repository contains the source CSVs, so the dashboard stays fully local and
-does not need to call the FPL API on every page load. Player photos remain lazy
-remote assets from the Premier League CDN, with an initials fallback in the UI.
+does not need to call the FPL API on every page load. Output goes to
+web/data/fpl/ and is split so the page only downloads what it shows:
+
+    index.json          season summaries, club tables and leaders (always loaded)
+    <season>.json       every player of one season (loaded on season switch)
+    careers.json        each player's season-by-season line (loaded on demand)
+    gws/<season>.json   gameweek-by-gameweek points per player (loaded on demand)
+
+Player photos remain lazy remote assets from the Premier League CDN, built in
+the browser from the player's stable `code`.
 """
 
 from __future__ import annotations
 
 import csv
-import json
-import re
 from collections import defaultdict
-from pathlib import Path
+
+from common import (
+    DATA_DIR, RATE_MIN_MINUTES, WEB_DATA_DIR,
+    canonical_club, number, per_90, repair_text, season_status, write_json,
+)
 
 
-ROOT = Path(__file__).resolve().parents[1]
-OUTPUT = ROOT / "web" / "data.js"
+OUTPUT_DIR = WEB_DATA_DIR / "fpl"
 
 SEASONS = [
     "2016-17", "2017-18", "2018-19", "2019-20",
     "2020-21", "2021-22", "2022-23", "2023-24", "2024-25", "2025-26", "2026-27",
 ]
 POSITION_NAMES = {1: "GK", 2: "DEF", 3: "MID", 4: "FWD"}
+CAREER_FIELDS = ["season", "id", "club", "position", "points", "goals", "assists", "minutes", "price"]
+GAMEWEEK_FIELDS = ["gw", "points", "minutes", "goals", "assists"]
 
 # The historical exports do not include a teams.csv file for every season.
 # These are the FPL team ids used by the matching season export.
@@ -50,84 +61,48 @@ HISTORICAL_TEAMS = {
 }
 
 
-def repair_text(value: str | None) -> str:
-    """Repair the common UTF-8-as-Latin-1 mojibake in old exports."""
-
-    if not value:
-        return ""
-    if any(token in value for token in ("Ã", "Â", "â")):
-        try:
-            return value.encode("latin1").decode("utf-8")
-        except UnicodeError:
-            pass
-    return value
-
-
-def number(row: dict[str, str], key: str, default: float = 0) -> float:
-    try:
-        value = float(row.get(key, default) or default)
-        return int(value) if value.is_integer() else round(value, 2)
-    except (TypeError, ValueError):
-        return default
-
-
 def team_names(season: str) -> dict[int, str]:
     if season in HISTORICAL_TEAMS:
         return HISTORICAL_TEAMS[season]
-    path = ROOT / "data" / season / "teams.csv"
+    path = DATA_DIR / season / "teams.csv"
     if path.exists():
         with path.open(encoding="utf-8-sig", newline="") as handle:
             return {int(row["id"]): repair_text(row["name"]) for row in csv.DictReader(handle)}
     return {}
 
 
-def short_name(name: str) -> str:
-    replacements = {
-        "Manchester City": "Man City",
-        "Manchester United": "Man Utd",
-        "Tottenham Hotspur": "Spurs",
-        "Wolverhampton Wanderers": "Wolves",
-        "West Bromwich Albion": "West Brom",
-    }
-    return replacements.get(name, name)
+def player_code(row: dict[str, str]) -> int:
+    """The `code` is stable across seasons; old exports only carry it in `photo`."""
+
+    code = int(number(row, "code", 0))
+    if not code:
+        digits = "".join(char for char in row.get("photo", "") if char.isdigit())
+        code = int(digits) if digits else 0
+    return code
 
 
-def photo_url(row: dict[str, str]) -> str:
-    photo = row.get("photo", "")
-    if not photo:
-        code = row.get("code", "")
-        photo = code
-    code = re.sub(r"\D", "", photo)
-    return f"https://resources.premierleague.com/premierleague/photos/players/110x140/p{code}.png" if code else ""
-
-
-def build_season(season: str) -> dict:
-    source = ROOT / "data" / season / "players_raw.csv"
+def read_players(season: str) -> list[dict]:
     clubs = team_names(season)
     players = []
-
-    with source.open(encoding="utf-8-sig", newline="") as handle:
+    with (DATA_DIR / season / "players_raw.csv").open(encoding="utf-8-sig", newline="") as handle:
         for row in csv.DictReader(handle):
             first = repair_text(row.get("first_name"))
             last = repair_text(row.get("second_name"))
             club_id = int(number(row, "team", 0))
-            club = short_name(clubs.get(club_id, f"Club {club_id}"))
-            position_id = int(number(row, "element_type", 0))
-            player = {
+            points = number(row, "total_points")
+            minutes = number(row, "minutes")
+            price = round(number(row, "now_cost") / 10, 1)
+            players.append({
                 "id": int(number(row, "id", 0)),
+                "code": player_code(row),
                 "name": (first + " " + last).strip() or repair_text(row.get("web_name")) or "Unknown player",
                 "shortName": repair_text(row.get("web_name")) or last or first or "Unknown",
-                "firstName": first,
-                "lastName": last,
-                "position": POSITION_NAMES.get(position_id, "—"),
-                "club": club,
-                "clubId": club_id,
-                "teamCode": int(number(row, "team_code", 0)),
-                "photo": photo_url(row),
-                "points": number(row, "total_points"),
+                "position": POSITION_NAMES.get(int(number(row, "element_type", 0)), "—"),
+                "club": canonical_club(clubs.get(club_id, f"Club {club_id}")),
+                "points": points,
                 "goals": number(row, "goals_scored"),
                 "assists": number(row, "assists"),
-                "minutes": number(row, "minutes"),
+                "minutes": minutes,
                 "cleanSheets": number(row, "clean_sheets"),
                 "bonus": number(row, "bonus"),
                 "bps": number(row, "bps"),
@@ -137,10 +112,14 @@ def build_season(season: str) -> dict:
                 "threat": number(row, "threat"),
                 "ppg": number(row, "points_per_game"),
                 "selected": number(row, "selected_by_percent"),
-                "price": round(number(row, "now_cost") / 10, 1),
-            }
-            players.append(player)
+                "price": price,
+                "pointsPer90": per_90(points, minutes),
+                "pointsPerMillion": round(points / price, 1) if price and minutes >= RATE_MIN_MINUTES else 0,
+            })
+    return players
 
+
+def summarize(season: str, players: list[dict]) -> dict:
     club_rollups = defaultdict(lambda: {"players": 0, "points": 0, "goals": 0, "assists": 0, "minutes": 0})
     for player in players:
         rollup = club_rollups[player["club"]]
@@ -162,10 +141,12 @@ def build_season(season: str) -> dict:
     leaders = sorted(players, key=lambda item: (item["points"], item["goals"], item["assists"]), reverse=True)
     return {
         "season": season,
-        "status": "current" if season == "2026-27" else "final",
-        "players": players,
+        "status": season_status(season),
+        "hasGameweeks": False,
         "clubs": sorted(club_rows, key=lambda item: item["points"], reverse=True),
         "leaders": leaders[:6],
+        "topGoals": max(players, key=lambda item: item["goals"], default=None),
+        "topAssists": max(players, key=lambda item: item["assists"], default=None),
         "stats": {
             "players": len(players),
             "clubs": len(club_rows),
@@ -180,13 +161,63 @@ def build_season(season: str) -> dict:
     }
 
 
+def read_gameweeks(season: str) -> dict[int, list[list[float]]] | None:
+    """Points per player and gameweek, summing double gameweeks."""
+
+    folder = DATA_DIR / season / "gws"
+    merged = folder / "merged_gw.csv"
+    files = [merged] if merged.exists() else sorted(folder.glob("gw*.csv"))
+    if not files:
+        return None
+
+    # Some upstream exports repeat a player's row for the same fixture; keep the last one.
+    appearances: dict[tuple, dict[str, str]] = {}
+    for path in files:
+        with path.open(encoding="utf-8-sig", errors="replace", newline="") as handle:
+            for position, row in enumerate(csv.DictReader(handle)):
+                player_id = int(number(row, "element", 0))
+                gameweek = int(number(row, "GW", 0) or number(row, "round", 0))
+                if player_id and gameweek:
+                    fixture = row.get("fixture") or f"{path.name}:{position}"
+                    appearances[(player_id, gameweek, fixture)] = row
+
+    totals: dict[int, dict[int, list[float]]] = defaultdict(dict)
+    for (player_id, gameweek, _), row in appearances.items():
+        line = totals[player_id].setdefault(gameweek, [gameweek, 0, 0, 0, 0])
+        line[1] += number(row, "total_points")
+        line[2] += number(row, "minutes")
+        line[3] += number(row, "goals_scored")
+        line[4] += number(row, "assists")
+    return {player_id: [weeks[gw] for gw in sorted(weeks)] for player_id, weeks in totals.items()}
+
+
 def main() -> None:
-    payload = {"seasons": [build_season(season) for season in SEASONS]}
-    OUTPUT.parent.mkdir(parents=True, exist_ok=True)
-    serialized = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
-    OUTPUT.write_text("window.FPL_DATA = " + serialized + ";\n", encoding="utf-8")
-    total_players = sum(len(item["players"]) for item in payload["seasons"])
-    print(f"Built {OUTPUT} with {total_players} player-season rows")
+    index = []
+    careers: dict[int, list[list]] = defaultdict(list)
+    total_players = 0
+    archive_leader = None
+
+    for season in SEASONS:
+        players = read_players(season)
+        total_players += len(players)
+        summary = summarize(season, players)
+        write_json(OUTPUT_DIR / f"{season}.json", {"season": season, "players": players})
+
+        gameweeks = read_gameweeks(season)
+        if gameweeks:
+            summary["hasGameweeks"] = True
+            write_json(OUTPUT_DIR / "gws" / f"{season}.json", {"fields": GAMEWEEK_FIELDS, "players": gameweeks})
+        index.append(summary)
+
+        for player in players:
+            if player["code"]:
+                careers[player["code"]].append([season] + [player[key] for key in CAREER_FIELDS[1:]])
+            if archive_leader is None or player["points"] > archive_leader["points"]:
+                archive_leader = {**player, "season": season}
+
+    write_json(OUTPUT_DIR / "index.json", {"mode": "fpl", "seasons": index, "archiveLeader": archive_leader})
+    careers_size = write_json(OUTPUT_DIR / "careers.json", {"fields": CAREER_FIELDS, "players": careers})
+    print(f"Built {OUTPUT_DIR} with {total_players} player-season rows (careers {careers_size // 1024} KB)")
 
 
 if __name__ == "__main__":
