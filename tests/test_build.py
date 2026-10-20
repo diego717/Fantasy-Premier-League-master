@@ -14,7 +14,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from common import RATE_MIN_MINUTES, WEB_DATA_DIR, canonical_club, number, per_90, repair_text  # noqa: E402
+from common import DATA_DIR, RATE_MIN_MINUTES, WEB_DATA_DIR, canonical_club, number, per_90, repair_text  # noqa: E402
 
 
 def load(path: str):
@@ -91,6 +91,27 @@ class GeneratedDataTests(unittest.TestCase):
             season = load(f"{league}/index.json")["seasons"][-1]["season"]
             for player in load(f"{league}/{season}.json")["players"]:
                 self.assertIn([league, season], [row[:2] for row in careers[str(player["id"])]])
+
+    def test_wikidata_photos_reference_known_understat_players(self):
+        for league in ("laliga", "bundesliga", "seriea", "ligue1"):
+            with self.subTest(league=league):
+                mapping = json.loads((DATA_DIR / "wikidata" / f"{league}.json").read_text(encoding="utf-8"))
+                known_ids = set()
+                generated_photos = {}
+                for path in (WEB_DATA_DIR / league).glob("20*.json"):
+                    for player in load(f"{league}/{path.stem}.json")["players"]:
+                        known_ids.add(str(player["id"]))
+                        if "photo" in player:
+                            generated_photos[str(player["id"])] = player["photo"]
+                self.assertTrue(mapping)
+                self.assertTrue(set(mapping) <= known_ids)
+                self.assertEqual(generated_photos, mapping)
+
+    def test_understat_indexes_include_generated_facts(self):
+        for league in ("laliga", "bundesliga", "seriea", "ligue1"):
+            facts = load(f"{league}/index.json")["facts"]
+            self.assertGreaterEqual(len(facts), 3)
+            self.assertTrue(all(fact["source"].startswith("https://understat.com/") for fact in facts))
 
     def test_fpl_gameweeks_add_up_to_season_points(self):
         index = load("fpl/index.json")

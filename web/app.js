@@ -20,7 +20,7 @@
   let drawerToken = 0;
   let lastFocus = null;
   let randomFactIndex = -1;
-  const randomFactHistory = { pl: [], fpl: [] };
+  const randomFactHistory = { pl: [], fpl: [], laliga: [], bundesliga: [], seriea: [], ligue1: [] };
   let fixtureWeek = 1;
   const jsonCache = new Map();
 
@@ -33,7 +33,11 @@
   // Folder under web/data/ for the active mode: "fpl", "pl" or an Understat league.
   const dataKey = () => (state.mode === "fpl" ? "fpl" : state.league);
   const isUnderstat = (key = dataKey()) => Boolean(leagueInfo(key).understat) && key !== "fpl";
-  const playerPhoto = (player, key = dataKey()) => (key === "fpl" ? photoUrl(player.code) : key === "pl" ? photoUrl(player.id) : "");
+  const playerPhoto = (player, key = dataKey()) => {
+    if (key === "fpl") return photoUrl(player.code);
+    if (key === "pl") return photoUrl(player.id);
+    return player.photo ? `https://commons.wikimedia.org/wiki/Special:FilePath/${encodeURIComponent(player.photo)}?width=240` : "";
+  };
   const careerKey = (player) => String(state.mode === "fpl" ? player.code : player.id);
   const careersPath = () => (isUnderstat() ? "leagues/careers.json" : `${dataKey()}/careers.json`);
   const uidOf = (player) => String(player.id);
@@ -322,11 +326,13 @@
   }
 
   function renderRandomFact() {
-    // The curated facts only cover FPL and the Premier League.
-    const facts = (state.mode === "fpl" || state.league === "pl") ? window.RANDOM_FACTS?.[state.mode] || [] : [];
+    const leagueFacts = state.mode === "fpl" ? window.RANDOM_FACTS?.fpl || [] : window.RANDOM_FACTS?.[state.league] || [];
+    const generatedFacts = state.mode === "pl" ? active?.index?.facts || [] : [];
+    const facts = [...leagueFacts, ...generatedFacts];
     $("#random-fact").hidden = !facts.length;
     if (!facts.length) return;
-    const history = randomFactHistory[state.mode];
+    const historyKey = state.mode === "fpl" ? "fpl" : state.league;
+    const history = randomFactHistory[historyKey];
     let available = facts.map((_, index) => index).filter((index) => !history.includes(index));
     if (!available.length) {
       history.length = 0;
@@ -714,6 +720,9 @@
     if (push) syncHash(true);
 
     const photo = playerPhoto(player);
+    const wikimediaPhoto = isUnderstat() && Boolean(player.photo);
+    $("#drawer-photo-link").hidden = !wikimediaPhoto;
+    if (wikimediaPhoto) $("#drawer-photo-link").href = `https://commons.wikimedia.org/wiki/File:${encodeURIComponent(player.photo)}`;
     $("#drawer-avatar").innerHTML = photo ? `<img src="${esc(photo)}" alt="${esc(player.name)}" data-fallback="initials" data-initials="${esc(initials(player.name))}">` : `<span>${esc(initials(player.name))}</span>`;
     $("#drawer-season").textContent = active.status === "current" ? `${state.season} · EN CURSO` : state.season;
     $("#drawer-position").textContent = player.position;
@@ -733,6 +742,9 @@
     $("#drawer-signal-label").textContent = attackScore > 90 ? "ALTA" : attackScore > 45 ? "MEDIA" : "EN DESARROLLO";
     $("#signal-value").textContent = `${Math.min(99, attackScore)}%`;
     $("#signal-arc").style.transform = `rotate(${Math.min(140, attackScore * 1.15) - 35}deg)`;
+    $("#drawer-footnote").innerHTML = wikimediaPhoto
+      ? `Foto enlazada a <a href="https://commons.wikimedia.org/wiki/File:${encodeURIComponent(player.photo)}" target="_blank" rel="noreferrer">Wikimedia Commons</a>. Si no existe, mostramos las iniciales.`
+      : "Las fotos se cargan desde el CDN oficial de Premier League cuando están disponibles. Si una imagen no existe, mostramos las iniciales.";
     renderCompareToggle(player);
 
     const token = ++drawerToken;

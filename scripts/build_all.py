@@ -17,6 +17,7 @@ import download_archive_gws
 import fetch_current_pl
 import fetch_current_season
 import fetch_understat
+import fetch_wikidata_photos
 
 
 def main() -> None:
@@ -29,6 +30,7 @@ def main() -> None:
         fetch_current_season.main()
         fetch_current_pl.main()  # needs the teams.csv written above
         fetch_understat.main()  # missing seasons + the current one
+        fetch_wikidata_photos.main()  # refresh Commons photos after player data changes
         print()
     for season in download_archive_gws.SEASONS:
         if not (download_archive_gws.DATA_DIR / season / "gws" / "merged_gw.csv").exists():

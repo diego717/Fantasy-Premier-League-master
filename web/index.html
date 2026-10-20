@@ -165,7 +165,7 @@
     <aside class="player-drawer" id="player-drawer" aria-hidden="true" aria-labelledby="drawer-name" aria-modal="true" role="dialog">
       <button class="drawer-close" id="drawer-close" type="button" aria-label="Cerrar detalle">×</button>
       <div class="drawer-topline"><span class="panel-kicker">PERFIL DE JUGADOR</span><span id="drawer-season">—</span></div>
-      <div class="drawer-identity"><div class="drawer-avatar" id="drawer-avatar"><span></span></div><div><p id="drawer-position">—</p><h2 id="drawer-name">—</h2><p id="drawer-club">—</p></div></div>
+      <div class="drawer-identity"><a class="drawer-photo-link" id="drawer-photo-link" href="#" target="_blank" rel="noreferrer" hidden><div class="drawer-avatar" id="drawer-avatar"><span></span></div></a><div><p id="drawer-position">—</p><h2 id="drawer-name">—</h2><p id="drawer-club">—</p></div></div>
       <div class="drawer-score"><span id="drawer-score-label">PUNTOS TOTALES</span><strong id="drawer-points">—</strong><span class="score-rule"></span></div>
       <button class="compare-toggle" id="compare-toggle" type="button" aria-pressed="false">AÑADIR AL COMPARADOR <span>+</span></button>
       <div class="drawer-metrics" id="drawer-metrics"></div>
@@ -179,7 +179,7 @@
         <div class="gw-chart" id="drawer-gws" role="img" aria-label="Puntos por jornada"></div>
       </section>
       <div class="drawer-signal"><div><span class="panel-kicker" id="drawer-signal-kicker">SEÑAL DE ATAQUE</span><strong id="drawer-signal-label">—</strong></div><div class="signal-radar"><i id="signal-arc"></i><b id="signal-value">—</b></div></div>
-      <p class="drawer-footnote">Las fotos se cargan desde el CDN oficial de Premier League cuando están disponibles. Si una imagen no existe, mostramos las iniciales.</p>
+      <p class="drawer-footnote" id="drawer-footnote">Las fotos se cargan desde el CDN oficial de Premier League cuando están disponibles. Si una imagen no existe, mostramos las iniciales.</p>
     </aside>
 
     <aside class="compare-panel" id="compare-panel" role="dialog" aria-modal="true" aria-labelledby="compare-title" aria-hidden="true" hidden>

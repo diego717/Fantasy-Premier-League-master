@@ -22,6 +22,7 @@ from fetch_understat import LEAGUES
 
 
 SOURCE_DIR = DATA_DIR / "understat"
+PHOTO_DIR = DATA_DIR / "wikidata"
 CAREER_FIELDS = ["league", "season", "id", "club", "position", "goals", "assists", "minutes", "appearances", "expectedGoals"]
 POSITIONS = {"G": "GK", "D": "DEF", "M": "MID", "F": "FWD"}
 
@@ -32,7 +33,18 @@ def position(value: str) -> str:
     return POSITIONS.get((value or "S")[0], "—")
 
 
-def read_players(rows: list[dict]) -> list[dict]:
+def read_photo_map(league: str) -> dict[str, str]:
+    path = PHOTO_DIR / f"{league}.json"
+    if not path.exists():
+        return {}
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        raise ValueError(f"{path} must contain an object mapping player ids to Commons files")
+    return {str(player_id): photo for player_id, photo in payload.items() if isinstance(photo, str) and photo}
+
+
+def read_players(rows: list[dict], photos: dict[str, str] | None = None) -> list[dict]:
+    photos = photos or {}
     players = []
     for row in rows:
         minutes = number(row, "time")
@@ -65,6 +77,8 @@ def read_players(rows: list[dict]) -> list[dict]:
         }
         if len(clubs) > 1:
             player["otherClubs"] = clubs[1:]
+        if str(player["id"]) in photos:
+            player["photo"] = photos[str(player["id"])]
         if player["name"]:
             players.append(player)
     return players
@@ -99,16 +113,52 @@ def read_fixtures(dates: list[dict]) -> dict:
     return {"teams": teams, "matches": matches}
 
 
+def generated_facts(league: str, season: str, players: list[dict]) -> list[dict]:
+    """Facts derived from the same rows shown in the dashboard."""
+
+    source = f"https://understat.com/league/{LEAGUES[league]}/{season[:4]}"
+    if not players:
+        return []
+    top_goals = max(players, key=lambda player: (player["goals"], player["minutes"]))
+    top_assists = max(players, key=lambda player: (player["assists"], player["minutes"]))
+    eligible = [player for player in players if player["minutes"] >= 900]
+    overperformer = max(eligible or players, key=lambda player: (player["goals"] - player["expectedGoals"], player["minutes"]))
+    overperformance = round(overperformer["goals"] - overperformer["expectedGoals"], 2)
+    return [
+        {
+            "eyebrow": f"GOLEADOR · {season}",
+            "title": f"{top_goals['shortName']} hizo {top_goals['goals']} goles",
+            "body": f"{top_goals['name']} fue el máximo goleador de {season} en {league}, según los datos de Understat.",
+            "source": source,
+        },
+        {
+            "eyebrow": f"ASISTIDOR · {season}",
+            "title": f"{top_assists['shortName']} dio {top_assists['assists']} asistencias",
+            "body": f"{top_assists['name']} lideró las asistencias de {season} en {league}, según los datos de Understat.",
+            "source": source,
+        },
+        {
+            "eyebrow": f"SOBRE XG · {season}",
+            "title": f"{overperformer['shortName']} superó su xG por {overperformance}",
+            "body": f"Marcó {overperformer['goals']} goles con un xG de {overperformer['expectedGoals']}; el cálculo usa jugadores con al menos 900 minutos cuando están disponibles.",
+            "source": source,
+        },
+    ]
+
+
 def main() -> None:
     careers: dict[int, list[list]] = defaultdict(list)
+    facts: dict[str, list[dict]] = defaultdict(list)
     for league in LEAGUES:
+        photos = read_photo_map(league)
         index, archive_leader, total = [], None, 0
         for path in sorted((SOURCE_DIR / league).glob("*.json")):
             season = path.stem
             raw = json.loads(path.read_text(encoding="utf-8"))
-            players = read_players(raw["players"])
+            players = read_players(raw["players"], photos)
             total += len(players)
             summary = summarize(season, players)
+            facts[league].extend(generated_facts(league, season, players))
             index.append(summary)
             write_json(WEB_DATA_DIR / league / f"{season}.json", {"season": season, "players": players})
             write_json(WEB_DATA_DIR / league / "fixtures" / f"{season}.json", read_fixtures(raw["dates"]))
@@ -116,7 +166,7 @@ def main() -> None:
                 careers[player["id"]].append([league, season] + [player[key] for key in CAREER_FIELDS[2:]])
                 if archive_leader is None or player["goals"] > archive_leader["goals"]:
                     archive_leader = {**player, "season": season}
-        write_json(WEB_DATA_DIR / league / "index.json", {"mode": league, "seasons": index, "archiveLeader": archive_leader})
+        write_json(WEB_DATA_DIR / league / "index.json", {"mode": league, "seasons": index, "archiveLeader": archive_leader, "facts": facts[league]})
         print(f"Built web/data/{league} with {total} player-season rows")
 
     for rows in careers.values():
