@@ -82,7 +82,7 @@ Everything the page reads lives in `web/data/`, split so the browser only downlo
 .\.venv\Scripts\python.exe scripts\build_all.py --skip-fixtures  # offline: keep the fixture files
 ```
 
-`build_all.py` also downloads the `merged_gw.csv` files for 2020-21 through 2025-26 from this repository's upstream when they are missing (`scripts/download_archive_gws.py`). The current season comes from `scripts/fetch_current_season.py`, which reads `bootstrap-static` and one `event/<gw>/live/` request per gameweek. The current season name is `CURRENT_SEASON` in `scripts/common.py`.
+`build_all.py` also downloads the `merged_gw.csv` files for 2019-20 through 2025-26 (plus the final 2019-20 player totals, since the local snapshot stopped at gameweek 29) from this repository's upstream when they are missing (`scripts/download_archive_gws.py`). The post-2020-pause events 39-47 are shown as gameweeks 30-38, as the game did. The current season comes from two scripts: `scripts/fetch_current_season.py` (FPL: `bootstrap-static` and one `event/<gw>/live/` request per gameweek) and `scripts/fetch_current_pl.py` (PL archive: the premierleague.com stats leaderboard, one request per club so each player keeps the club he played for). The current season name is `CURRENT_SEASON` in `scripts/common.py`.
 
 Two source quirks are handled by the builders: the PL archive repeats a loaned or transferred player's full season under every club he was registered with (the row is merged and the FPL club decides when available; the others appear as "también …"), and club names are normalized across sources and seasons (`A Villa` → `Aston Villa`, `Ipswich Town` → `Ipswich`, …).
 

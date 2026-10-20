@@ -1,7 +1,7 @@
 """Regenerate every dataset the dashboard reads from web/data/.
 
     python scripts/build_all.py                  # rebuild from local CSVs + fixtures
-    python scripts/build_all.py --fetch-current  # refresh the current season from the FPL API first
+    python scripts/build_all.py --fetch-current  # refresh the current season (FPL + PL APIs) first
     python scripts/build_all.py --skip-fixtures  # no network: keep the fixture files already built
 """
 
@@ -13,17 +13,19 @@ import build_dashboard_data
 import build_fixture_data
 import build_pl_dashboard_data
 import download_archive_gws
+import fetch_current_pl
 import fetch_current_season
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--fetch-current", action="store_true", help="refresh the current season from the FPL API")
+    parser.add_argument("--fetch-current", action="store_true", help="refresh the current season from the FPL and PL APIs")
     parser.add_argument("--skip-fixtures", action="store_true", help="do not rebuild fixtures (needs network)")
     args = parser.parse_args()
 
     if args.fetch_current:
         fetch_current_season.main()
+        fetch_current_pl.main()  # needs the teams.csv written above
         print()
     for season in download_archive_gws.SEASONS:
         if not (download_archive_gws.DATA_DIR / season / "gws" / "merged_gw.csv").exists():

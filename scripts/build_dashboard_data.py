@@ -34,6 +34,10 @@ POSITION_NAMES = {1: "GK", 2: "DEF", 3: "MID", 4: "FWD"}
 CAREER_FIELDS = ["season", "id", "club", "position", "points", "goals", "assists", "minutes", "price"]
 GAMEWEEK_FIELDS = ["gw", "points", "minutes", "goals", "assists"]
 
+# After the 2020 pause FPL kept event ids 39-47 for what the game showed as
+# gameweeks 30-38; the exports use the ids.
+GAMEWEEK_OFFSETS = {"2019-20": (39, 9)}
+
 # The historical exports do not include a teams.csv file for every season.
 # These are the FPL team ids used by the matching season export.
 HISTORICAL_TEAMS = {
@@ -170,6 +174,7 @@ def read_gameweeks(season: str) -> dict[int, list[list[float]]] | None:
     if not files:
         return None
 
+    first_shifted, shift = GAMEWEEK_OFFSETS.get(season, (0, 0))
     # Some upstream exports repeat a player's row for the same fixture; keep the last one.
     appearances: dict[tuple, dict[str, str]] = {}
     for path in files:
@@ -177,6 +182,8 @@ def read_gameweeks(season: str) -> dict[int, list[list[float]]] | None:
             for position, row in enumerate(csv.DictReader(handle)):
                 player_id = int(number(row, "element", 0))
                 gameweek = int(number(row, "GW", 0) or number(row, "round", 0))
+                if shift and gameweek >= first_shifted:
+                    gameweek -= shift
                 if player_id and gameweek:
                     fixture = row.get("fixture") or f"{path.name}:{position}"
                     appearances[(player_id, gameweek, fixture)] = row
