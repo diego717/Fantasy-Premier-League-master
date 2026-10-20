@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#0d1317" />
+    <meta name="description" content="Explorador interactivo de estadísticas históricas de Fantasy Premier League." />
+    <title>FPL // Data Lab</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;500;600;700;800&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="grain" aria-hidden="true"></div>
+    <div class="scroll-field" id="scroll-field" aria-hidden="true"><span class="scroll-field-grid"></span><span class="scroll-field-orbit scroll-field-orbit-a"></span><span class="scroll-field-orbit scroll-field-orbit-b"></span><span class="scroll-field-rail"></span><span class="scroll-field-signal"><i></i></span></div>
+    <header class="site-header">
+      <a class="brand" href="#top" aria-label="FPL Data Lab, inicio">
+        <span class="brand-mark">FPL<span>//</span></span>
+        <span class="brand-word">DATA LAB</span>
+      </a>
+      <div class="mode-switch" id="mode-switch" role="group" aria-label="Cambiar fuente estadística">
+        <button class="mode-button active" data-mode="fpl" type="button">FPL <small>FANTASY</small></button>
+        <button class="mode-button" data-mode="pl" type="button">PL <small>LIGA</small></button>
+      </div>
+      <div class="header-meta">
+        <span class="live-dot"></span>
+        <span>ARCHIVO HISTÓRICO</span>
+        <span class="header-divider"></span>
+        <span id="row-count">2.582 perfiles</span>
+      </div>
+      <a class="source-link" href="https://github.com/vaastav/Fantasy-Premier-League" target="_blank" rel="noreferrer">FUENTE <span>↗</span></a>
+    </header>
+
+    <main id="top">
+      <section class="hero shell">
+        <div class="hero-copy reveal" style="--delay: 0ms">
+          <p class="eyebrow"><span class="eyebrow-line"></span> FANTASY PREMIER LEAGUE / SCOUTING CONSOLE</p>
+          <h1>VER EL JUEGO<br /><em>ENTRE</em> LOS PUNTOS.</h1>
+          <p class="hero-lede">Más de una década de actuaciones y una pregunta simple: ¿qué historias aparecen cuando miramos los números con otra lupa?</p>
+          <div class="hero-actions">
+            <a class="button button-primary" href="#explore">EXPLORAR TABLERO <span>↓</span></a>
+            <span class="hero-note">Datos de temporadas<br /><span id="season-range">2016–17 → 2026–27</span></span>
+          </div>
+        </div>
+        <div class="hero-art reveal" style="--delay: 140ms" aria-hidden="true">
+          <div class="pitch-grid"></div>
+          <div class="orbit orbit-one"></div>
+          <div class="orbit orbit-two"></div>
+          <div class="hero-ball"><span>FPL</span></div>
+          <div class="hero-tag tag-top">MÉTRICA<br /><strong>01</strong></div>
+          <div class="hero-tag tag-bottom">SEÑAL<br /><strong>ACTIVA</strong></div>
+          <div class="hero-stat"><strong id="hero-season-count">11</strong><span>temporadas<br />en foco</span></div>
+        </div>
+      </section>
+
+      <section class="season-strip shell reveal" style="--delay: 240ms" aria-label="Cambiar temporada">
+        <div class="strip-label"><span class="section-index">01</span><span>TEMPORADA<br /><strong>EN FOCO</strong></span></div>
+        <div class="season-tabs" id="season-tabs"></div>
+        <div class="strip-caption" id="strip-caption">Seleccioná un corte para ver cómo cambia la señal.</div>
+      </section>
+
+      <section class="dashboard shell" id="explore">
+        <div class="section-heading reveal" style="--delay: 80ms">
+          <div><p class="eyebrow" id="mode-kicker"><span class="eyebrow-line"></span> FPL / LECTURA RÁPIDA</p><h2>EL PULSO<br /><em>DE LA TEMPORADA</em></h2></div>
+          <p class="section-description">Un mapa de rendimiento para pasar de la foto general al detalle de cada futbolista sin perder el contexto.</p>
+        </div>
+
+        <div class="stats-grid" id="stats-grid"></div>
+
+        <div class="season-intel-grid reveal" style="--delay: 120ms">
+          <article class="panel season-stories-panel">
+            <div class="panel-heading"><div><p class="panel-kicker" id="stories-kicker">ARCHIVO DE TEMPORADA</p><h3 id="stories-title">Lo que dejó el año</h3></div><span class="panel-badge" id="stories-badge">—</span></div>
+            <div class="season-stories" id="season-stories"></div>
+            <div class="random-fact" id="random-fact">
+              <div class="random-fact-heading"><span class="story-eyebrow" id="random-fact-kicker">DATO RANDOM</span><button class="random-fact-button" id="random-fact-button" type="button">OTRO DATO <span>↻</span></button></div>
+              <strong id="random-fact-title">—</strong>
+              <p id="random-fact-body">—</p>
+              <a id="random-fact-source" href="#" target="_blank" rel="noreferrer">FUENTE OFICIAL <span>↗</span></a>
+            </div>
+          </article>
+          <aside class="panel fixture-panel">
+            <div class="panel-heading"><div><p class="panel-kicker">FIXTURE EN LA PÁGINA</p><h3>Jornada a jornada</h3></div><span class="panel-badge" id="fixture-badge">38 MW</span></div>
+            <p class="fixture-intro" id="fixture-intro">Calendario de la temporada seleccionada.</p>
+            <label class="fixture-picker"><span>SELECCIONAR JORNADA</span><select id="fixture-week-select" aria-label="Seleccionar jornada"></select></label>
+            <div class="fixture-matches" id="fixture-matches"></div>
+            <div class="fixture-links"><a class="fixture-link" id="fixture-official-link" href="#" target="_blank" rel="noreferrer">VER EN PREMIERLEAGUE.COM <span>↗</span></a><a class="fixture-link fixture-link-muted" id="fixture-source-link" href="#" target="_blank" rel="noreferrer">FUENTE DEL CALENDARIO <span>↗</span></a></div>
+          </aside>
+        </div>
+
+        <div class="insight-grid">
+            <article class="panel season-pulse reveal" style="--delay: 160ms">
+            <div class="panel-heading"><div><p class="panel-kicker" id="pulse-kicker">PULSO HISTÓRICO</p><h3>La liga en movimiento</h3></div><span class="panel-badge" id="season-range-badge">2016—27</span></div>
+            <div class="season-bars" id="season-bars"></div>
+            <div class="axis-labels"><span id="season-metric-label">PUNTOS TOTALES</span><span>ESCALA RELATIVA</span></div>
+          </article>
+          <article class="panel featured-panel reveal" style="--delay: 220ms">
+            <div class="panel-heading"><div><p class="panel-kicker" id="leader-kicker">TOP PERFORMER</p><h3 id="leader-name">—</h3></div><span class="leader-arrow">↗</span></div>
+            <div class="featured-body" id="featured-body"></div>
+          </article>
+        </div>
+
+        <div class="explorer-heading reveal" style="--delay: 120ms">
+          <div><p class="eyebrow" id="explorer-kicker"><span class="eyebrow-line"></span> 02 / EXPLORADOR</p><h2>ENCONTRÁ<br /><em>TU SEÑAL</em></h2></div>
+          <div class="result-count" id="result-count">— perfiles</div>
+        </div>
+
+        <div class="filters panel reveal" style="--delay: 180ms">
+          <label class="search-field"><span class="field-icon">⌕</span><input id="search-input" type="search" placeholder="Buscar jugador..." autocomplete="off" /><kbd>⌘ K</kbd></label>
+          <label class="select-field"><span>TEMPORADA</span><select id="season-select"></select></label>
+          <label class="select-field"><span>CLUB</span><select id="club-select"><option value="all">Todos los clubes</option></select></label>
+          <label class="select-field"><span>POSICIÓN</span><select id="position-select"><option value="all">Todas</option><option value="GK">GK</option><option value="DEF">DEF</option><option value="MID">MID</option><option value="FWD">FWD</option></select></label>
+          <label class="select-field"><span>ORDENAR POR</span><select id="sort-select"></select></label>
+          <button class="reset-button" id="reset-button" type="button">LIMPIAR <span>↺</span></button>
+        </div>
+
+        <div class="data-layout">
+          <section class="player-section">
+            <div class="list-header"><span id="player-header">JUGADOR</span><span id="club-header">CLUB / POS.</span><span id="primary-header">PUNTOS</span><span id="signal-header">SEÑALES</span><span id="profile-header">PERFIL</span></div>
+            <div id="player-list" class="player-list"></div>
+            <div id="empty-state" class="empty-state" hidden><span>∅</span><h3>No encontramos esa señal</h3><p>Probá con otro nombre, club o combinación de filtros.</p><button class="button button-secondary" id="empty-reset" type="button">VER TODOS</button></div>
+          </section>
+          <aside class="club-panel panel reveal" style="--delay: 240ms">
+            <div class="panel-heading"><div><p class="panel-kicker">CLUBES</p><h3>Ranking de escuadras</h3></div><span class="panel-badge" id="club-season-badge">—</span></div>
+            <p class="club-intro" id="club-intro">Puntos acumulados por jugador en la temporada seleccionada.</p>
+            <div id="club-list" class="club-list"></div>
+          </aside>
+        </div>
+      </section>
+
+      <section class="closing shell reveal" style="--delay: 120ms">
+        <div class="closing-mark">FPL<span>//</span></div>
+        <div><p class="eyebrow"><span class="eyebrow-line"></span> SEGUÍ LA SEÑAL</p><h2>LOS NÚMEROS<br /><em>TAMBIÉN JUEGAN.</em></h2></div>
+        <p>Un punto no cuenta toda la historia. Pero casi siempre sabe dónde empezar.</p>
+      </section>
+    </main>
+
+    <footer class="site-footer shell"><span>FPL DATA LAB / EXPLORADOR HISTÓRICO</span><span>HECHO CON DATOS ABIERTOS · 2016—27</span></footer>
+
+    <div class="modal-backdrop" id="modal-backdrop" hidden></div>
+    <aside class="player-drawer" id="player-drawer" aria-hidden="true" aria-labelledby="drawer-name" role="dialog">
+      <button class="drawer-close" id="drawer-close" type="button" aria-label="Cerrar detalle">×</button>
+      <div class="drawer-topline"><span class="panel-kicker">PERFIL DE JUGADOR</span><span id="drawer-season">—</span></div>
+      <div class="drawer-identity"><div class="drawer-avatar" id="drawer-avatar"><span></span></div><div><p id="drawer-position">—</p><h2 id="drawer-name">—</h2><p id="drawer-club">—</p></div></div>
+      <div class="drawer-score"><span id="drawer-score-label">PUNTOS TOTALES</span><strong id="drawer-points">—</strong><span class="score-rule"></span></div>
+      <div class="drawer-metrics" id="drawer-metrics"></div>
+      <div class="drawer-signal"><div><span class="panel-kicker" id="drawer-signal-kicker">SEÑAL DE ATAQUE</span><strong id="drawer-signal-label">—</strong></div><div class="signal-radar"><i id="signal-arc"></i><b id="signal-value">—</b></div></div>
+      <p class="drawer-footnote">Las fotos se cargan desde el CDN oficial de Premier League cuando están disponibles. Si una imagen no existe, mostramos las iniciales.</p>
+    </aside>
+
+    <script src="data.js"></script>
+    <script src="pl_data.js"></script>
+    <script src="season_stories.js"></script>
+    <script src="fixtures_data.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>
