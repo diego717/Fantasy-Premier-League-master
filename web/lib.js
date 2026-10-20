@@ -3,7 +3,9 @@
   // Must match RATE_MIN_MINUTES in scripts/common.py.
   const RATE_MIN_MINUTES = 450;
   const RATE_SORTS = new Set(["pointsPer90", "pointsPerMillion", "goalsPer90", "contributionsPer90"]);
-  const HASH_KEYS = { mode: "mode", season: "season", search: "q", club: "club", position: "pos", sort: "sort", player: "player", compare: "cmp" };
+  const SEASON_PATTERN = /^\d{4}-\d{2}$/;
+  const ID_PATTERN = /^\d{1,9}$/;
+  const HASH_KEYS ={ mode: "mode", season: "season", search: "q", club: "club", position: "pos", sort: "sort", player: "player", compare: "cmp" };
   // Letters NFD does not decompose into base + accent.
   const SPECIAL_LETTERS = { "ø": "o", "æ": "ae", "œ": "oe", "ß": "ss", "ł": "l", "đ": "d", "ð": "d", "þ": "th", "ı": "i" };
 
@@ -23,11 +25,13 @@
     for (const [key, param] of Object.entries(HASH_KEYS)) {
       if (params.has(param)) state[key] = params.get(param);
     }
-    if (state.player) state.player = String(state.player);
+    // The hash comes from shared links: anything that is not a well-formed season or numeric id is dropped.
+    if (state.season && !SEASON_PATTERN.test(state.season)) delete state.season;
+    if (state.player && !ID_PATTERN.test(state.player)) delete state.player;
     state.compare = state.compare ? state.compare.split(",").filter(Boolean).map((entry) => {
       const [season, uid] = entry.split("~");
       return { season, uid };
-    }).filter((entry) => entry.season && entry.uid) : [];
+    }).filter((entry) => SEASON_PATTERN.test(entry.season || "") && ID_PATTERN.test(entry.uid || "")) : [];
     return state;
   }
 

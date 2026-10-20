@@ -27,6 +27,11 @@ test("parseHash tolerates junk", () => {
   assert.deepEqual(parseHash("#cmp=bad,,2020-21~3"), { compare: [{ season: "2020-21", uid: "3" }] });
 });
 
+test("parseHash drops malformed seasons and ids from shared links", () => {
+  const evil = encodeURIComponent('2023-24.json?<img src=x onerror=alert(1)>');
+  assert.deepEqual(parseHash(`#season=${evil}&player=1"x&cmp=${evil}~1,2023-24~<b>,2023-24~5`), { compare: [{ season: "2023-24", uid: "5" }] });
+});
+
 test("niceTicks returns round steps covering the range", () => {
   assert.deepEqual(niceTicks(0, 100, 5), [0, 20, 40, 60, 80, 100]);
   assert.deepEqual(niceTicks(4, 14.5, 6), [4, 6, 8, 10, 12, 14]);

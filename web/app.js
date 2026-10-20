@@ -829,7 +829,7 @@
     }
     tray.hidden = entries.length === 0;
     document.body.classList.toggle("has-compare", entries.length > 0);
-    $("#compare-chips").innerHTML = entries.map((entry) => `<span class="compare-chip">${avatar(entry.player, "compare-chip-avatar")}<span><strong>${esc(entry.player.shortName)}</strong><small>${entry.season}</small></span><button type="button" data-remove="${entry.season}~${entry.uid}" aria-label="Quitar a ${esc(entry.player.name)} (${entry.season}) del comparador">×</button></span>`).join("");
+    $("#compare-chips").innerHTML = entries.map((entry) => `<span class="compare-chip">${avatar(entry.player, "compare-chip-avatar")}<span><strong>${esc(entry.player.shortName)}</strong><small>${esc(entry.season)}</small></span><button type="button" data-remove="${esc(`${entry.season}~${entry.uid}`)}" aria-label="Quitar a ${esc(entry.player.name)} (${esc(entry.season)}) del comparador">×</button></span>`).join("");
     $("#compare-open").disabled = entries.length < 2;
     $("#compare-open").innerHTML = entries.length < 2 ? "ELEGÍ OTRO JUGADOR" : `COMPARAR ${entries.length} <span>↗</span>`;
   }
@@ -839,7 +839,7 @@
     if (entries.length < 2) return;
     const config = modeConfig();
     lastFocus = document.activeElement;
-    const head = `<div class="compare-row compare-head" style="--cols:${entries.length}"><span></span>${entries.map((entry) => `<div class="compare-player">${avatar(entry.player, "compare-avatar")}<div><strong>${esc(entry.player.name)}</strong><small>${esc(entry.player.club)} · ${esc(entry.player.position)} · ${entry.season}</small></div></div>`).join("")}</div>`;
+    const head = `<div class="compare-row compare-head" style="--cols:${entries.length}"><span></span>${entries.map((entry) => `<div class="compare-player">${avatar(entry.player, "compare-avatar")}<div><strong>${esc(entry.player.name)}</strong><small>${esc(entry.player.club)} · ${esc(entry.player.position)} · ${esc(entry.season)}</small></div></div>`).join("")}</div>`;
     const rows = config.compareMetrics.map(([key, label, rankable = true]) => {
       // Rates under the minutes threshold are not comparable: shown as "—" and left out of the ranking.
       const values = entries.map((entry) => (isRateSort(key) && entry.player.minutes < RATE_MIN_MINUTES ? null : Number(entry.player[key]) || 0));
